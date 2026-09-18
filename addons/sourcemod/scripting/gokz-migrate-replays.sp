@@ -88,6 +88,7 @@ enum struct LegacyTime
 	int teleports;
 	int created;
 	int replayIndex;
+	int nextIndex;
 }
 
 enum struct LegacyJump
@@ -101,6 +102,7 @@ enum struct LegacyJump
 	int block;
 	int created;
 	int replayIndex;
+	int nextIndex;
 }
 
 enum struct MigrateReplay
@@ -471,29 +473,10 @@ static void DeleteLists()
 	delete g_CourseIndexByKey;
 	delete g_CourseIndexByID;
 	delete g_PlayerIDs;
-	DeleteListMap(g_TimeIndexesByKey);
-	DeleteListMap(g_JumpIndexesByKey);
+	delete g_TimeIndexesByKey;
+	delete g_JumpIndexesByKey;
 	delete g_MigratedTimeMaps;
 	delete g_MigratedJumpIDs;
-}
-
-static void DeleteListMap(StringMap map)
-{
-	if (map == null)
-	{
-		return;
-	}
-	StringMapSnapshot snapshot = map.Snapshot();
-	for (int i = 0; i < snapshot.Length; i++)
-	{
-		char key[128];
-		snapshot.GetKey(i, key, sizeof(key));
-		ArrayList list;
-		map.GetValue(key, list);
-		delete list;
-	}
-	delete snapshot;
-	delete map;
 }
 
 int ListLength(ArrayList list)
@@ -505,25 +488,12 @@ int ListLength(ArrayList list)
 	return list.Length;
 }
 
-void ListMapPush(StringMap map, const char[] key, int value)
+int ChainIndex(StringMap headByKey, const char[] key, int index)
 {
-	ArrayList list;
-	if (!map.GetValue(key, list))
-	{
-		list = new ArrayList();
-		map.SetValue(key, list);
-	}
-	list.Push(value);
-}
-
-ArrayList ListMapGet(StringMap map, const char[] key)
-{
-	ArrayList list;
-	if (!map.GetValue(key, list))
-	{
-		return null;
-	}
-	return list;
+	int previousHead = -1;
+	headByKey.GetValue(key, previousHead);
+	headByKey.SetValue(key, index);
+	return previousHead;
 }
 
 void IntKey(int value, char[] buffer, int maxlength)

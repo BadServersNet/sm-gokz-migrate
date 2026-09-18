@@ -161,66 +161,70 @@ static void MatchJumpReplay(int index, MigrateReplay replay)
 
 static int FindClosestTime(MigrateReplay replay, int mapCourseID, int runTime)
 {
-	int best = -1;
-	int bestDelta = 0;
 	for (int offset = -1; offset <= 1; offset++)
 	{
 		char key[64];
 		TimeKey(replay.steamID, mapCourseID, replay.mode, replay.style, runTime + offset, key, sizeof(key));
-		ArrayList candidates = ListMapGet(g_TimeIndexesByKey, key);
-		if (candidates == null)
+		int head;
+		if (g_TimeIndexesByKey.GetValue(key, head))
 		{
-			continue;
+			return FindClosestTimeInChain(head, replay.timestamp);
 		}
-		for (int i = 0; i < candidates.Length; i++)
+	}
+	return -1;
+}
+
+static int FindClosestTimeInChain(int head, int timestamp)
+{
+	int best = head;
+	int bestDelta = -1;
+	int index = head;
+	while (index != -1)
+	{
+		LegacyTime time;
+		g_Times.GetArray(index, time);
+		int delta = AbsoluteDifference(time.created, timestamp);
+		if (bestDelta == -1 || delta <= bestDelta)
 		{
-			int candidate = candidates.Get(i);
-			LegacyTime time;
-			g_Times.GetArray(candidate, time);
-			int delta = AbsoluteDifference(time.created, replay.timestamp);
-			if (best == -1 || delta < bestDelta)
-			{
-				best = candidate;
-				bestDelta = delta;
-			}
+			best = index;
+			bestDelta = delta;
 		}
-		if (best != -1)
-		{
-			return best;
-		}
+		index = time.nextIndex;
 	}
 	return best;
 }
 
 static int FindClosestJump(MigrateReplay replay, int distance)
 {
-	int best = -1;
-	int bestDelta = 0;
 	for (int offset = -1; offset <= 1; offset++)
 	{
 		char key[64];
 		JumpKey(replay.steamID, replay.jumpType, replay.mode, distance + offset, replay.block, key, sizeof(key));
-		ArrayList candidates = ListMapGet(g_JumpIndexesByKey, key);
-		if (candidates == null)
+		int head;
+		if (g_JumpIndexesByKey.GetValue(key, head))
 		{
-			continue;
+			return FindClosestJumpInChain(head, replay.timestamp);
 		}
-		for (int i = 0; i < candidates.Length; i++)
+	}
+	return -1;
+}
+
+static int FindClosestJumpInChain(int head, int timestamp)
+{
+	int best = head;
+	int bestDelta = -1;
+	int index = head;
+	while (index != -1)
+	{
+		LegacyJump jump;
+		g_Jumps.GetArray(index, jump);
+		int delta = AbsoluteDifference(jump.created, timestamp);
+		if (bestDelta == -1 || delta <= bestDelta)
 		{
-			int candidate = candidates.Get(i);
-			LegacyJump jump;
-			g_Jumps.GetArray(candidate, jump);
-			int delta = AbsoluteDifference(jump.created, replay.timestamp);
-			if (best == -1 || delta < bestDelta)
-			{
-				best = candidate;
-				bestDelta = delta;
-			}
+			best = index;
+			bestDelta = delta;
 		}
-		if (best != -1)
-		{
-			return best;
-		}
+		index = jump.nextIndex;
 	}
 	return best;
 }

@@ -111,11 +111,11 @@ bool Step_LoadTimes()
 		time.teleports = results.FetchInt(6);
 		time.created = results.FetchInt(7);
 		time.replayIndex = -1;
-		int index = g_Times.PushArray(time);
-
 		char key[64];
 		TimeKey(time.steamID, time.mapCourseID, time.mode, time.style, time.runTime, key, sizeof(key));
-		ListMapPush(g_TimeIndexesByKey, key, index);
+		int index = g_Times.Length;
+		time.nextIndex = ChainIndex(g_TimeIndexesByKey, key, index);
+		g_Times.PushArray(time);
 		g_LastID = time.timeID;
 		rows++;
 	}
@@ -147,11 +147,11 @@ bool Step_LoadJumps()
 		jump.block = results.FetchInt(6);
 		jump.created = results.FetchInt(7);
 		jump.replayIndex = -1;
-		int index = g_Jumps.PushArray(jump);
-
 		char key[64];
 		JumpKey(jump.steamID, jump.jumpType, jump.mode, jump.distance, jump.block, key, sizeof(key));
-		ListMapPush(g_JumpIndexesByKey, key, index);
+		int index = g_Jumps.Length;
+		jump.nextIndex = ChainIndex(g_JumpIndexesByKey, key, index);
+		g_Jumps.PushArray(jump);
 		g_LastID = jump.jumpID;
 		rows++;
 	}
