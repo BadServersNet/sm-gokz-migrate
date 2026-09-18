@@ -3,7 +3,7 @@
 bool Step_LoadMaps()
 {
 	char query[512];
-	FormatEx(query, sizeof(query), "SELECT MapID, Name, IFNULL(UNIX_TIMESTAMP(LastPlayed), -1), UNIX_TIMESTAMP(Created), %s FROM Maps WHERE MapID > %d ORDER BY MapID LIMIT %d", InputHasRankedPool() ? "InRankedPool" : "0", g_LastID, MIGRATE_PAGE_SIZE);
+	FormatEx(query, sizeof(query), "SELECT MapID, Name, IFNULL(UNIX_TIMESTAMP(LastPlayed), -1), UNIX_TIMESTAMP(Created), %s FROM Maps WHERE MapID > %d ORDER BY MapID LIMIT %d", gB_InputHasRankedPool ? "InRankedPool" : "0", g_LastID, MIGRATE_PAGE_SIZE);
 	DBResultSet results = Migrate_Query(gH_InputDB, query);
 	if (results == null)
 	{
@@ -188,6 +188,13 @@ bool Step_LoadPositions()
 
 // =====[ PUBLIC ]=====
 
+void RegisterCourseIndex(int mapID, int course, int index)
+{
+	char key[32];
+	CourseKey(mapID, course, key, sizeof(key));
+	g_CourseIndexByKey.SetValue(key, index);
+}
+
 void CourseKey(int mapID, int course, char[] buffer, int maxlength)
 {
 	FormatEx(buffer, maxlength, "%d_%d", mapID, course);
@@ -256,18 +263,6 @@ int FindPlayerIndex(int steamID)
 
 
 // =====[ PRIVATE ]=====
-
-static bool InputHasRankedPool()
-{
-	static int cached = -1;
-	if (cached != -1)
-	{
-		return cached == 1;
-	}
-	int count = Migrate_FetchScalarInt(gH_InputDB, "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='Maps' AND COLUMN_NAME='InRankedPool'");
-	cached = count > 0 ? 1 : 0;
-	return cached == 1;
-}
 
 static bool LoadVBPositions()
 {

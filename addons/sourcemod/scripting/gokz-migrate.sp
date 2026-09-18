@@ -201,6 +201,7 @@ StringMap g_Renames;
 
 char gC_LogPath[PLATFORM_MAX_PATH];
 char gC_ReportPrefix[PLATFORM_MAX_PATH];
+bool gB_InputHasRankedPool;
 bool gB_OutputHasRankedPool;
 
 ConVar gCV_gokz_migrate_global_maps_file;
@@ -567,6 +568,7 @@ static void DeleteLists()
 	delete g_PlayerIndexByID;
 	delete g_GlobalMaps;
 	DeleteListMap(g_GlobalStems);
+	g_GlobalStems = null;
 	delete g_Renames;
 }
 

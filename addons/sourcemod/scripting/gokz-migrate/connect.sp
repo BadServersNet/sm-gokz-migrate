@@ -101,14 +101,22 @@ static bool VerifyDistinctDatabases()
 	}
 	Migrate_Log("Output database currently holds %d players, %d times and %d replay rows.", outputPlayers, outputTimes, outputReplays);
 
-	int rankedPool = Migrate_FetchScalarInt(gH_OutputDB, "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='Maps' AND COLUMN_NAME='InRankedPool'");
-	if (rankedPool < 0)
+	int outputRankedPool = CountRankedPoolColumns(gH_OutputDB);
+	int inputRankedPool = CountRankedPoolColumns(gH_InputDB);
+	if (outputRankedPool < 0 || inputRankedPool < 0)
 	{
 		return false;
 	}
-	gB_OutputHasRankedPool = rankedPool > 0;
+	gB_OutputHasRankedPool = outputRankedPool > 0;
+	gB_InputHasRankedPool = inputRankedPool > 0;
 	Migrate_Log("Output Maps table %s the InRankedPool column.", gB_OutputHasRankedPool ? "has" : "does not have");
+	Migrate_Log("Input Maps table %s the InRankedPool column.", gB_InputHasRankedPool ? "has" : "does not have");
 	return true;
+}
+
+static int CountRankedPoolColumns(Database db)
+{
+	return Migrate_FetchScalarInt(db, "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='Maps' AND COLUMN_NAME='InRankedPool'");
 }
 
 static void LoadRenames()

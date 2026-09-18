@@ -75,6 +75,10 @@ bool Step_AnalyzeCourses()
 				merged++;
 				Migrate_Log("MapCourse %d (%s course %d) merges into MapCourse %d of %s.", course.mapCourseID, map.name, course.course, target.mapCourseID, map.targetName);
 			}
+			else
+			{
+				RegisterCourseIndex(map.targetMapID, course.course, i);
+			}
 		}
 		g_Courses.SetArray(i, course);
 	}
