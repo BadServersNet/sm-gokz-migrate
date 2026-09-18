@@ -31,15 +31,17 @@ One-time migration tool. Scans a legacy replay folder (`_runs`, `_tempRuns`, `_j
 
 ## Building
 
-The plugins compile against the GOKZ replay store includes (`gokz/core`, `gokz/localdb`, `gokz/replays`) and the GlobalAPI include. Point `spcomp` at the include folder of a GOKZ checkout that has the replay store:
+The GOKZ, GlobalAPI, MovementAPI and sm-json includes the plugins need are vendored in `addons/sourcemod/scripting/include`, so only the SourceMod compiler is required. Run `spcomp` from `addons/sourcemod/scripting`:
 
 ```bash
-spcomp -i ../gokz/addons/sourcemod/scripting/include addons/sourcemod/scripting/gokz-migrate.sp
+spcomp gokz-migrate.sp
 ```
 
 ```bash
-spcomp -i ../gokz/addons/sourcemod/scripting/include addons/sourcemod/scripting/gokz-migrate-replays.sp
+spcomp gokz-migrate-replays.sp
 ```
+
+The `gokz` includes come from the replay store version of GOKZ. Copy them again if `gokz/replays.inc` or `gokz/localdb.inc` change there.
 
 ## Installing
 
