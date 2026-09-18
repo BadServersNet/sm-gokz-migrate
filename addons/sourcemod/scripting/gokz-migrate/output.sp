@@ -21,7 +21,7 @@ bool Step_InsertPlayers()
 {
 	QueryBegin("INSERT INTO Players (SteamID32, Alias, Country, IP, Cheater, LastPlayed, Created) VALUES ");
 	int batched = 0;
-	while (g_Cursor < g_Players.Length && batched < MIGRATE_INSERT_BATCH)
+	while (g_Cursor < g_Players.Length && batched < MIGRATE_INSERT_BATCH && QueryHasRoom())
 	{
 		MigratePlayer player;
 		g_Players.GetArray(g_Cursor, player);
@@ -39,7 +39,7 @@ bool Step_InsertPlayers()
 		SqlString(gH_OutputDB, player.country, player.countryNull, country, sizeof(country));
 		SqlString(gH_OutputDB, player.ip, player.ipNull, ip, sizeof(ip));
 		SqlTimestamp(player.lastPlayed, lastPlayed, sizeof(lastPlayed));
-		SqlTimestamp(player.created, created, sizeof(created));
+		SqlCreated(player.created, created, sizeof(created));
 		QueryAppend("%s(%d, %s, %s, %s, %d, %s, %s)", batched > 0 ? "," : "", player.steamID, alias, country, ip, player.cheater, lastPlayed, created);
 		batched++;
 	}
@@ -58,7 +58,7 @@ bool Step_InsertMaps()
 	}
 
 	int batched = 0;
-	while (g_Cursor < g_Maps.Length && batched < MIGRATE_INSERT_BATCH)
+	while (g_Cursor < g_Maps.Length && batched < MIGRATE_INSERT_BATCH && QueryHasRoom())
 	{
 		MigrateMap map;
 		g_Maps.GetArray(g_Cursor, map);
@@ -72,7 +72,7 @@ bool Step_InsertMaps()
 		char created[32];
 		SqlString(gH_OutputDB, map.targetName, false, name, sizeof(name));
 		SqlTimestamp(map.lastPlayed, lastPlayed, sizeof(lastPlayed));
-		SqlTimestamp(map.created, created, sizeof(created));
+		SqlCreated(map.created, created, sizeof(created));
 		if (gB_OutputHasRankedPool)
 		{
 			QueryAppend("%s(%d, %s, %s, %s, %d)", batched > 0 ? "," : "", map.mapID, name, lastPlayed, created, map.inRankedPool);
@@ -90,7 +90,7 @@ bool Step_InsertCourses()
 {
 	QueryBegin("INSERT INTO MapCourses (MapCourseID, MapID, Course, Created) VALUES ");
 	int batched = 0;
-	while (g_Cursor < g_Courses.Length && batched < MIGRATE_INSERT_BATCH)
+	while (g_Cursor < g_Courses.Length && batched < MIGRATE_INSERT_BATCH && QueryHasRoom())
 	{
 		MigrateCourse course;
 		g_Courses.GetArray(g_Cursor, course);
@@ -100,7 +100,7 @@ bool Step_InsertCourses()
 			continue;
 		}
 		char created[32];
-		SqlTimestamp(course.created, created, sizeof(created));
+		SqlCreated(course.created, created, sizeof(created));
 		QueryAppend("%s(%d, %d, %d, %s)", batched > 0 ? "," : "", course.mapCourseID, course.targetMapID, course.course, created);
 		batched++;
 	}
@@ -111,7 +111,7 @@ bool Step_InsertTimes()
 {
 	QueryBegin("INSERT INTO Times (TimeID, SteamID32, MapCourseID, Mode, Style, RunTime, Teleports, Created) VALUES ");
 	int batched = 0;
-	while (g_Cursor < g_Times.Length && batched < MIGRATE_INSERT_BATCH)
+	while (g_Cursor < g_Times.Length && batched < MIGRATE_INSERT_BATCH && QueryHasRoom())
 	{
 		MigrateTime time;
 		g_Times.GetArray(g_Cursor, time);
@@ -121,7 +121,7 @@ bool Step_InsertTimes()
 			continue;
 		}
 		char created[32];
-		SqlTimestamp(time.created, created, sizeof(created));
+		SqlCreated(time.created, created, sizeof(created));
 		QueryAppend("%s(%d, %d, %d, %d, %d, %d, %d, %s)", batched > 0 ? "," : "", time.timeID, time.steamID, time.targetMapCourseID, time.mode, time.style, time.runTime, time.teleports, created);
 		batched++;
 	}
@@ -132,7 +132,7 @@ bool Step_InsertJumps()
 {
 	QueryBegin("INSERT INTO Jumpstats (JumpID, SteamID32, JumpType, Mode, Distance, IsBlockJump, Block, Strafes, Sync, Pre, Max, Airtime, Created) VALUES ");
 	int batched = 0;
-	while (g_Cursor < g_Jumps.Length && batched < MIGRATE_INSERT_BATCH)
+	while (g_Cursor < g_Jumps.Length && batched < MIGRATE_INSERT_BATCH && QueryHasRoom())
 	{
 		MigrateJump jump;
 		g_Jumps.GetArray(g_Cursor, jump);
@@ -142,7 +142,7 @@ bool Step_InsertJumps()
 			continue;
 		}
 		char created[32];
-		SqlTimestamp(jump.created, created, sizeof(created));
+		SqlCreated(jump.created, created, sizeof(created));
 		QueryAppend("%s(%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %s)", batched > 0 ? "," : "", jump.jumpID, jump.steamID, jump.jumpType, jump.mode, jump.distance, jump.isBlockJump, jump.block, jump.strafes, jump.sync, jump.pre, jump.max, jump.airtime, created);
 		batched++;
 	}

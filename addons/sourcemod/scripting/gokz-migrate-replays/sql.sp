@@ -6,13 +6,18 @@
 
 DBResultSet Migrate_Query(Database db, const char[] query)
 {
+	char error[512];
+	SQL_LockDatabase(db);
 	DBResultSet results = SQL_Query(db, query);
+	if (results == null)
+	{
+		SQL_GetError(db, error, sizeof(error));
+	}
+	SQL_UnlockDatabase(db);
 	if (results != null)
 	{
 		return results;
 	}
-	char error[512];
-	SQL_GetError(db, error, sizeof(error));
 	char preview[200];
 	strcopy(preview, sizeof(preview), query);
 	Migrate_Fail("Query failed: %s (query starts with: %s)", error, preview);
