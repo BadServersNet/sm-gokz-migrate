@@ -49,7 +49,7 @@ bool Step_ParseReplays()
 		g_Replays.PushArray(replay);
 	}
 	g_Cursor = end;
-	Migrate_Log("Parsed %d of %d replay files.", g_Cursor, g_FileQueue.Length);
+	Migrate_Detail("Parsed %d of %d replay files.", g_Cursor, g_FileQueue.Length);
 	return g_Cursor >= g_FileQueue.Length;
 }
 
@@ -59,7 +59,7 @@ bool Step_ParseReplays()
 
 void GetCategoryName(ReplayCategory category, char[] buffer, int maxlength)
 {
-	static const char names[][] = { "_runs", "_tempRuns", "_jumps", "_cheaters", "other" };
+	static const char names[][] = { "_runs", "_tempRuns", "other" };
 	strcopy(buffer, maxlength, names[view_as<int>(category)]);
 }
 
@@ -68,8 +68,6 @@ void GetReplayTypeName(int replayType, char[] buffer, int maxlength)
 	switch (replayType)
 	{
 		case ReplayType_Run: strcopy(buffer, maxlength, "run");
-		case ReplayType_Jump: strcopy(buffer, maxlength, "jump");
-		case ReplayType_Cheater: strcopy(buffer, maxlength, "cheater");
 		default: FormatEx(buffer, maxlength, "type%d", replayType);
 	}
 }
@@ -98,6 +96,13 @@ static void ScanDirectory(const char[] directory)
 		}
 		char path[PLATFORM_MAX_PATH];
 		FormatEx(path, sizeof(path), "%s/%s", directory, name);
+		ReplayCategory category = CategoryFromPath(path);
+		if (category == ReplayCategory_Other)
+		{
+			g_SkippedFiles++;
+			Migrate_Detail("Skipping %s, only _runs and _tempRuns are migrated.", path);
+			continue;
+		}
 		if (type == FileType_Directory)
 		{
 			g_DirectoryQueue.PushString(path);
@@ -110,7 +115,7 @@ static void ScanDirectory(const char[] directory)
 		if (!HasReplayExtension(name))
 		{
 			g_SkippedFiles++;
-			Migrate_Log("Skipping non-replay file %s", path);
+			Migrate_Detail("Skipping non-replay file %s", path);
 			continue;
 		}
 		g_FileQueue.PushString(path);
@@ -149,14 +154,6 @@ static ReplayCategory CategoryFromPath(const char[] path)
 	{
 		return ReplayCategory_TempRuns;
 	}
-	if (StrEqual(relative, "_jumps", false))
-	{
-		return ReplayCategory_Jumps;
-	}
-	if (StrEqual(relative, "_cheaters", false))
-	{
-		return ReplayCategory_Cheaters;
-	}
 	return ReplayCategory_Other;
 }
 
@@ -172,7 +169,7 @@ static void ParseReplayFile(const char[] path, MigrateReplay replay)
 	if (file == null)
 	{
 		strcopy(replay.note, sizeof(MigrateReplay::note), "could not open file");
-		Migrate_Log("Unreadable replay %s: could not open file.", path);
+		Migrate_Detail("Unreadable replay %s: could not open file.", path);
 		return;
 	}
 
@@ -182,7 +179,7 @@ static void ParseReplayFile(const char[] path, MigrateReplay replay)
 	{
 		delete file;
 		strcopy(replay.note, sizeof(MigrateReplay::note), "bad magic number");
-		Migrate_Log("Unreadable replay %s: bad magic number 0x%X.", path, magicNumber);
+		Migrate_Detail("Unreadable replay %s: bad magic number 0x%X.", path, magicNumber);
 		return;
 	}
 
@@ -194,7 +191,7 @@ static void ParseReplayFile(const char[] path, MigrateReplay replay)
 		default:
 		{
 			FormatEx(replay.note, sizeof(MigrateReplay::note), "unsupported format version %d", replay.formatVersion);
-			Migrate_Log("Unreadable replay %s: unsupported format version %d.", path, replay.formatVersion);
+			Migrate_Detail("Unreadable replay %s: unsupported format version %d.", path, replay.formatVersion);
 		}
 	}
 	delete file;
@@ -237,38 +234,20 @@ static void ParseVersion2Header(File file, MigrateReplay replay)
 	file.ReadInt32(replay.tickCount);
 	file.Seek(8, SEEK_CUR);
 
-	switch (replay.replayType)
+	if (replay.replayType != ReplayType_Run)
 	{
-		case ReplayType_Run:
-		{
-			int timeBits;
-			file.ReadInt32(timeBits);
-			replay.time = view_as<float>(timeBits);
-			file.ReadInt8(replay.course);
-			file.ReadInt32(replay.teleports);
-			replay.status = MatchStatus_Unmatched;
-		}
-		case ReplayType_Jump:
-		{
-			file.ReadInt8(replay.jumpType);
-			int distanceBits;
-			file.ReadInt32(distanceBits);
-			replay.distance = view_as<float>(distanceBits);
-			file.ReadInt32(replay.block);
-			file.ReadInt8(replay.strafes);
-			replay.status = MatchStatus_Unmatched;
-		}
-		case ReplayType_Cheater:
-		{
-			replay.status = MatchStatus_Cheater;
-		}
-		default:
-		{
-			replay.status = MatchStatus_UnsupportedType;
-			FormatEx(replay.note, sizeof(MigrateReplay::note), "unknown replay type %d", replay.replayType);
-			Migrate_Log("Replay %s has unknown replay type %d.", replay.path, replay.replayType);
-		}
+		replay.status = MatchStatus_UnsupportedType;
+		FormatEx(replay.note, sizeof(MigrateReplay::note), "replay type %d is not migrated", replay.replayType);
+		Migrate_Detail("Replay %s has replay type %d which is not migrated.", replay.path, replay.replayType);
+		return;
 	}
+
+	int timeBits;
+	file.ReadInt32(timeBits);
+	replay.time = view_as<float>(timeBits);
+	file.ReadInt8(replay.course);
+	file.ReadInt32(replay.teleports);
+	replay.status = MatchStatus_Unmatched;
 }
 
 static void SkipString(File file)

@@ -1,3 +1,7 @@
+#define MIGRATE_MAPS_PER_TICK 20
+
+
+
 // =====[ STEPS ]=====
 
 bool Step_WipeOutput()
@@ -14,7 +18,11 @@ bool Step_WipeOutput()
 		}
 		Migrate_Log("Wiped %s.", tables[i]);
 	}
-	return true;
+	if (!ResetAutoIncrements())
+	{
+		return false;
+	}
+	return CreateIDTables();
 }
 
 bool Step_InsertPlayers()
@@ -48,67 +56,23 @@ bool Step_InsertPlayers()
 
 bool Step_InsertMaps()
 {
-	if (gB_OutputHasRankedPool)
-	{
-		QueryBegin("INSERT INTO Maps (MapID, Name, LastPlayed, Created, InRankedPool) VALUES ");
-	}
-	else
-	{
-		QueryBegin("INSERT INTO Maps (MapID, Name, LastPlayed, Created) VALUES ");
-	}
-
-	int batched = 0;
-	while (g_Cursor < g_Maps.Length && batched < MIGRATE_INSERT_BATCH && QueryHasRoom())
+	int end = IntMin(g_Cursor + MIGRATE_MAPS_PER_TICK, g_Maps.Length);
+	for (int i = g_Cursor; i < end; i++)
 	{
 		MigrateMap map;
-		g_Maps.GetArray(g_Cursor, map);
-		g_Cursor++;
-		if (!IsMapInserted(map))
+		g_Maps.GetArray(i, map);
+		if (!MoveMap(map))
 		{
-			continue;
+			return false;
 		}
-		char name[136];
-		char lastPlayed[32];
-		char created[32];
-		SqlString(gH_OutputDB, map.targetName, false, name, sizeof(name));
-		SqlTimestamp(map.lastPlayed, lastPlayed, sizeof(lastPlayed));
-		SqlCreated(map.created, created, sizeof(created));
-		if (gB_OutputHasRankedPool)
-		{
-			QueryAppend("%s(%d, %s, %s, %s, %d)", batched > 0 ? "," : "", map.mapID, name, lastPlayed, created, map.inRankedPool);
-		}
-		else
-		{
-			QueryAppend("%s(%d, %s, %s, %s)", batched > 0 ? "," : "", map.mapID, name, lastPlayed, created);
-		}
-		batched++;
 	}
-	return FlushBatch("Maps", batched, g_Cursor >= g_Maps.Length);
-}
-
-bool Step_InsertCourses()
-{
-	QueryBegin("INSERT INTO MapCourses (MapCourseID, MapID, Course, Created) VALUES ");
-	int batched = 0;
-	while (g_Cursor < g_Courses.Length && batched < MIGRATE_INSERT_BATCH && QueryHasRoom())
-	{
-		MigrateCourse course;
-		g_Courses.GetArray(g_Cursor, course);
-		g_Cursor++;
-		if (!course.keep)
-		{
-			continue;
-		}
-		char created[32];
-		SqlCreated(course.created, created, sizeof(created));
-		QueryAppend("%s(%d, %d, %d, %s)", batched > 0 ? "," : "", course.mapCourseID, course.targetMapID, course.course, created);
-		batched++;
-	}
-	return FlushBatch("MapCourses", batched, g_Cursor >= g_Courses.Length);
+	g_Cursor = end;
+	return g_Cursor >= g_Maps.Length;
 }
 
 bool Step_InsertTimes()
 {
+	int start = g_Cursor;
 	QueryBegin("INSERT INTO Times (TimeID, SteamID32, MapCourseID, Mode, Style, RunTime, Teleports, Created) VALUES ");
 	int batched = 0;
 	while (g_Cursor < g_Times.Length && batched < MIGRATE_INSERT_BATCH && QueryHasRoom())
@@ -120,33 +84,27 @@ bool Step_InsertTimes()
 		{
 			continue;
 		}
+		int newMapCourseID = GetNewMapCourseID(time.targetMapCourseID);
 		char created[32];
 		SqlCreated(time.created, created, sizeof(created));
-		QueryAppend("%s(%d, %d, %d, %d, %d, %d, %d, %s)", batched > 0 ? "," : "", time.timeID, time.steamID, time.targetMapCourseID, time.mode, time.style, time.runTime, time.teleports, created);
+		QueryAppend("%s(%d, %d, %d, %d, %d, %d, %d, %s)", batched > 0 ? "," : "", time.newTimeID, time.steamID, newMapCourseID, time.mode, time.style, time.runTime, time.teleports, created);
 		batched++;
 	}
-	return FlushBatch("Times", batched, g_Cursor >= g_Times.Length);
-}
-
-bool Step_InsertJumps()
-{
-	QueryBegin("INSERT INTO Jumpstats (JumpID, SteamID32, JumpType, Mode, Distance, IsBlockJump, Block, Strafes, Sync, Pre, Max, Airtime, Created) VALUES ");
-	int batched = 0;
-	while (g_Cursor < g_Jumps.Length && batched < MIGRATE_INSERT_BATCH && QueryHasRoom())
+	int end = g_Cursor;
+	bool finished = end >= g_Times.Length;
+	if (batched == 0)
 	{
-		MigrateJump jump;
-		g_Jumps.GetArray(g_Cursor, jump);
-		g_Cursor++;
-		if (!jump.keep)
-		{
-			continue;
-		}
-		char created[32];
-		SqlCreated(jump.created, created, sizeof(created));
-		QueryAppend("%s(%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %s)", batched > 0 ? "," : "", jump.jumpID, jump.steamID, jump.jumpType, jump.mode, jump.distance, jump.isBlockJump, jump.block, jump.strafes, jump.sync, jump.pre, jump.max, jump.airtime, created);
-		batched++;
+		return finished;
 	}
-	return FlushBatch("Jumpstats", batched, g_Cursor >= g_Jumps.Length);
+	if (!FlushBatch("Times", batched, true))
+	{
+		return false;
+	}
+	if (!InsertTimeIDs(start, end))
+	{
+		return false;
+	}
+	return finished;
 }
 
 bool Step_InsertPositions()
@@ -173,8 +131,178 @@ static bool FlushBatch(const char[] table, int batched, bool finished)
 	{
 		return false;
 	}
-	Migrate_Log("Inserted batch %d into %s (%d rows, %d bytes).", g_BatchNumber, table, batched, QueryLength());
+	Migrate_Detail("Inserted batch %d into %s (%d rows, %d bytes).", g_BatchNumber, table, batched, QueryLength());
 	return finished;
+}
+
+static bool ResetAutoIncrements()
+{
+	static const char tables[][] = { "Replays", "Times", "Jumpstats", "MapCourses", "Maps" };
+	for (int i = 0; i < sizeof(tables); i++)
+	{
+		char query[128];
+		FormatEx(query, sizeof(query), "ALTER TABLE %s AUTO_INCREMENT = 1", tables[i]);
+		if (!Migrate_Exec(gH_OutputDB, query))
+		{
+			return false;
+		}
+		Migrate_Log("Reset the AUTO_INCREMENT of %s.", tables[i]);
+	}
+	return true;
+}
+
+static bool CreateIDTables()
+{
+	static const char tables[][] = { "MigrateMapIDs", "MigrateCourseIDs", "MigrateTimeIDs" };
+	static const char columns[][] = { "MapID", "MapCourseID", "TimeID" };
+	for (int i = 0; i < sizeof(tables); i++)
+	{
+		char query[512];
+		FormatEx(query, sizeof(query), "DROP TABLE IF EXISTS %s", tables[i]);
+		if (!Migrate_Exec(gH_OutputDB, query))
+		{
+			return false;
+		}
+		FormatEx(query, sizeof(query), "CREATE TABLE %s (Old%s INTEGER UNSIGNED NOT NULL, New%s INTEGER UNSIGNED NOT NULL, CONSTRAINT PK_%s PRIMARY KEY (Old%s), INDEX IX_%s_New (New%s))", tables[i], columns[i], columns[i], tables[i], columns[i], tables[i], columns[i]);
+		if (!Migrate_Exec(gH_OutputDB, query))
+		{
+			return false;
+		}
+		Migrate_Log("Created the %s table that maps every Old%s to its New%s.", tables[i], columns[i], columns[i]);
+	}
+	return true;
+}
+
+static bool MoveMap(MigrateMap map)
+{
+	if (map.newMapID == 0)
+	{
+		return true;
+	}
+	if (IsMapInserted(map))
+	{
+		if (!InsertMap(map))
+		{
+			return false;
+		}
+		if (!InsertMapCourses(map))
+		{
+			return false;
+		}
+	}
+	if (!InsertMapID(map))
+	{
+		return false;
+	}
+	return InsertCourseIDs(map);
+}
+
+static bool InsertMap(MigrateMap map)
+{
+	char name[136];
+	char lastPlayed[32];
+	char created[32];
+	SqlString(gH_OutputDB, map.targetName, false, name, sizeof(name));
+	SqlTimestamp(map.lastPlayed, lastPlayed, sizeof(lastPlayed));
+	SqlCreated(map.created, created, sizeof(created));
+	if (gB_OutputHasRankedPool)
+	{
+		QueryBegin("INSERT INTO Maps (MapID, Name, LastPlayed, Created, InRankedPool) VALUES ");
+		QueryAppend("(%d, %s, %s, %s, %d)", map.newMapID, name, lastPlayed, created, map.inRankedPool);
+	}
+	else
+	{
+		QueryBegin("INSERT INTO Maps (MapID, Name, LastPlayed, Created) VALUES ");
+		QueryAppend("(%d, %s, %s, %s)", map.newMapID, name, lastPlayed, created);
+	}
+	if (!QueryFlush(gH_OutputDB))
+	{
+		return false;
+	}
+	Migrate_Detail("Moved map %s: MapID %d becomes MapID %d.", map.targetName, map.mapID, map.newMapID);
+	return true;
+}
+
+static bool InsertMapCourses(MigrateMap map)
+{
+	QueryBegin("INSERT INTO MapCourses (MapCourseID, MapID, Course, Created) VALUES ");
+	int batched = 0;
+	for (int courseNumber = 0; courseNumber < GOKZ_MAX_COURSES; courseNumber++)
+	{
+		int courseIndex = FindCourseIndex(map.mapID, courseNumber);
+		if (courseIndex == -1)
+		{
+			continue;
+		}
+		MigrateCourse course;
+		g_Courses.GetArray(courseIndex, course);
+		if (!course.keep)
+		{
+			continue;
+		}
+		char created[32];
+		SqlCreated(course.created, created, sizeof(created));
+		QueryAppend("%s(%d, %d, %d, %s)", batched > 0 ? "," : "", course.newMapCourseID, map.newMapID, course.course, created);
+		batched++;
+	}
+	if (batched == 0)
+	{
+		return true;
+	}
+	return QueryFlush(gH_OutputDB);
+}
+
+static bool InsertMapID(MigrateMap map)
+{
+	QueryBegin("INSERT INTO MigrateMapIDs (OldMapID, NewMapID) VALUES ");
+	QueryAppend("(%d, %d)", map.mapID, map.newMapID);
+	return QueryFlush(gH_OutputDB);
+}
+
+static bool InsertCourseIDs(MigrateMap map)
+{
+	QueryBegin("INSERT INTO MigrateCourseIDs (OldMapCourseID, NewMapCourseID) VALUES ");
+	int batched = 0;
+	for (int courseNumber = 0; courseNumber < GOKZ_MAX_COURSES; courseNumber++)
+	{
+		int courseIndex = FindCourseIndex(map.mapID, courseNumber);
+		if (courseIndex == -1)
+		{
+			continue;
+		}
+		MigrateCourse course;
+		g_Courses.GetArray(courseIndex, course);
+		bool moved = course.mapID == map.mapID && course.newMapCourseID != 0;
+		if (!moved)
+		{
+			continue;
+		}
+		QueryAppend("%s(%d, %d)", batched > 0 ? "," : "", course.mapCourseID, course.newMapCourseID);
+		batched++;
+	}
+	if (batched == 0)
+	{
+		return true;
+	}
+	return QueryFlush(gH_OutputDB);
+}
+
+static bool InsertTimeIDs(int start, int end)
+{
+	QueryBegin("INSERT INTO MigrateTimeIDs (OldTimeID, NewTimeID) VALUES ");
+	int batched = 0;
+	for (int i = start; i < end; i++)
+	{
+		MigrateTime time;
+		g_Times.GetArray(i, time);
+		if (!time.keep)
+		{
+			continue;
+		}
+		QueryAppend("%s(%d, %d)", batched > 0 ? "," : "", time.timeID, time.newTimeID);
+		batched++;
+	}
+	return QueryFlush(gH_OutputDB);
 }
 
 static bool InsertVBPositions()
@@ -194,7 +322,8 @@ static bool InsertVBPositions()
 			{
 				continue;
 			}
-			QueryAppend("%s(%d, %d, %f, %f, %f, %d, %d)", batched > 0 ? "," : "", position.steamID, position.targetMapID, position.x, position.y, position.z, position.course, position.isStart);
+			int newMapID = GetNewMapID(position.targetMapID);
+			QueryAppend("%s(%d, %d, %f, %f, %f, %d, %d)", batched > 0 ? "," : "", position.steamID, newMapID, position.x, position.y, position.z, position.course, position.isStart);
 			batched++;
 		}
 		batchStart = end;
@@ -229,7 +358,8 @@ static bool InsertStartPositions()
 			{
 				continue;
 			}
-			QueryAppend("%s(%d, %d, %f, %f, %f, %f, %f)", batched > 0 ? "," : "", position.steamID, position.targetMapID, position.x, position.y, position.z, position.angle0, position.angle1);
+			int newMapID = GetNewMapID(position.targetMapID);
+			QueryAppend("%s(%d, %d, %f, %f, %f, %f, %f)", batched > 0 ? "," : "", position.steamID, newMapID, position.x, position.y, position.z, position.angle0, position.angle1);
 			batched++;
 		}
 		batchStart = end;

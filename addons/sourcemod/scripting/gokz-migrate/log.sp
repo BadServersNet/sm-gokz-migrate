@@ -1,5 +1,7 @@
 static File g_ReportMaps;
 static File g_ReportPlayers;
+static File g_ReportTimes;
+static File g_ReportReplays;
 
 
 
@@ -34,6 +36,17 @@ void Migrate_Log(const char[] format, any ...)
 	LogToFileEx(gC_LogPath, "%s", message);
 }
 
+void Migrate_Detail(const char[] format, any ...)
+{
+	if (gC_LogPath[0] == '\0')
+	{
+		return;
+	}
+	char message[2048];
+	VFormat(message, sizeof(message), format, 2);
+	LogToFileEx(gC_LogPath, "%s", message);
+}
+
 File OpenReport(const char[] suffix, const char[] header)
 {
 	char path[PLATFORM_MAX_PATH];
@@ -64,7 +77,7 @@ File Report_Maps()
 {
 	if (g_ReportMaps == null)
 	{
-		g_ReportMaps = OpenReport("maps", "MapID,Name,Status,TargetMapID,TargetName,TimesKept,Validated,Note");
+		g_ReportMaps = OpenReport("maps", "MapID,Name,Status,TargetMapID,NewMapID,TargetName,TimesKept,Validated,Note");
 	}
 	return g_ReportMaps;
 }
@@ -78,10 +91,30 @@ File Report_Players()
 	return g_ReportPlayers;
 }
 
+File Report_Times()
+{
+	if (g_ReportTimes == null)
+	{
+		g_ReportTimes = OpenReport("times_without_replay", "TimeID,NewTimeID,SteamID32,Map,Course,Mode,Style,RunTimeMS,Teleports,Created,Migrated");
+	}
+	return g_ReportTimes;
+}
+
+File Report_Replays()
+{
+	if (g_ReportReplays == null)
+	{
+		g_ReportReplays = OpenReport("replays", "Path,Category,Format,Type,Map,SteamID32,Mode,Style,Timestamp,Course,Time,Teleports,Ticks,Bytes,Status,LegacyTimeID,RecordID,TargetMap,Key,Imported,Note");
+	}
+	return g_ReportReplays;
+}
+
 void CloseReports()
 {
 	delete g_ReportMaps;
 	delete g_ReportPlayers;
+	delete g_ReportTimes;
+	delete g_ReportReplays;
 }
 
 void CsvEscape(const char[] input, char[] buffer, int maxlength)

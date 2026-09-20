@@ -19,6 +19,14 @@ bool Step_Connect()
 	{
 		return false;
 	}
+	if (!VerifyReplayPlugin())
+	{
+		return false;
+	}
+	if (!VerifyInputDirectory())
+	{
+		return false;
+	}
 	LoadRenames();
 	return true;
 }
@@ -111,6 +119,38 @@ static bool VerifyDistinctDatabases()
 	gB_InputHasRankedPool = inputRankedPool > 0;
 	Migrate_Log("Output Maps table %s the InRankedPool column.", gB_OutputHasRankedPool ? "has" : "does not have");
 	Migrate_Log("Input Maps table %s the InRankedPool column.", gB_InputHasRankedPool ? "has" : "does not have");
+	return true;
+}
+
+static bool VerifyReplayPlugin()
+{
+	if (!LibraryExists("gokz-replays"))
+	{
+		Migrate_Fail("gokz-replays is not loaded; it is needed to import replays into the store.");
+		return false;
+	}
+	int pending = GOKZ_RP_GetPendingUploadCount();
+	Migrate_Log("gokz-replays currently has %d pending uploads.", pending);
+	if (gB_DryRun || pending == 0)
+	{
+		return true;
+	}
+	int dropped = GOKZ_RP_ClearUploadQueue();
+	Migrate_Log("Dropped %d pending uploads and their outbox markers; every matched replay is queued again by this run.", dropped);
+	return true;
+}
+
+static bool VerifyInputDirectory()
+{
+	char relativePath[PLATFORM_MAX_PATH];
+	gCV_gokz_migrate_replays_input_dir.GetString(relativePath, sizeof(relativePath));
+	BuildPath(Path_SM, gC_InputDirectory, sizeof(gC_InputDirectory), "%s", relativePath);
+	if (!DirExists(gC_InputDirectory))
+	{
+		Migrate_Fail("Replay input directory \"%s\" does not exist.", gC_InputDirectory);
+		return false;
+	}
+	Migrate_Log("Replay input directory: %s", gC_InputDirectory);
 	return true;
 }
 

@@ -32,7 +32,7 @@ bool Step_LoadMaps()
 		rows++;
 	}
 	delete results;
-	Migrate_Log("Loaded %d maps (%d total).", rows, g_Maps.Length);
+	Migrate_Detail("Loaded %d maps (%d total).", rows, g_Maps.Length);
 	return rows < MIGRATE_PAGE_SIZE;
 }
 
@@ -67,7 +67,7 @@ bool Step_LoadCourses()
 		rows++;
 	}
 	delete results;
-	Migrate_Log("Loaded %d map courses (%d total).", rows, g_Courses.Length);
+	Migrate_Detail("Loaded %d map courses (%d total).", rows, g_Courses.Length);
 	return rows < MIGRATE_PAGE_SIZE;
 }
 
@@ -104,7 +104,7 @@ bool Step_LoadPlayers()
 		rows++;
 	}
 	delete results;
-	Migrate_Log("Loaded %d players (%d total).", rows, g_Players.Length);
+	Migrate_Detail("Loaded %d players (%d total).", rows, g_Players.Length);
 	return rows < MIGRATE_PAGE_SIZE;
 }
 
@@ -130,48 +130,17 @@ bool Step_LoadTimes()
 		time.runTime = results.FetchInt(5);
 		time.teleports = results.FetchInt(6);
 		time.created = results.FetchInt(7);
+		time.replayIndex = -1;
+		char key[64];
+		TimeKey(time.steamID, time.mapCourseID, time.mode, time.style, time.runTime, key, sizeof(key));
+		int index = g_Times.Length;
+		time.nextIndex = ChainIndex(g_TimeIndexesByKey, key, index);
 		g_Times.PushArray(time);
 		g_LastID = time.timeID;
 		rows++;
 	}
 	delete results;
-	Migrate_Log("Loaded %d times (%d total).", rows, g_Times.Length);
-	return rows < MIGRATE_PAGE_SIZE;
-}
-
-bool Step_LoadJumps()
-{
-	char query[512];
-	FormatEx(query, sizeof(query), "SELECT JumpID, SteamID32, JumpType, Mode, Distance, IsBlockJump, Block, Strafes, Sync, Pre, Max, Airtime, UNIX_TIMESTAMP(Created) FROM Jumpstats WHERE JumpID > %d ORDER BY JumpID LIMIT %d", g_LastID, MIGRATE_PAGE_SIZE);
-	DBResultSet results = Migrate_Query(gH_InputDB, query);
-	if (results == null)
-	{
-		return false;
-	}
-
-	int rows = 0;
-	while (results.FetchRow())
-	{
-		MigrateJump jump;
-		jump.jumpID = results.FetchInt(0);
-		jump.steamID = results.FetchInt(1);
-		jump.jumpType = results.FetchInt(2);
-		jump.mode = results.FetchInt(3);
-		jump.distance = results.FetchInt(4);
-		jump.isBlockJump = results.FetchInt(5);
-		jump.block = results.FetchInt(6);
-		jump.strafes = results.FetchInt(7);
-		jump.sync = results.FetchInt(8);
-		jump.pre = results.FetchInt(9);
-		jump.max = results.FetchInt(10);
-		jump.airtime = results.FetchInt(11);
-		jump.created = results.FetchInt(12);
-		g_Jumps.PushArray(jump);
-		g_LastID = jump.jumpID;
-		rows++;
-	}
-	delete results;
-	Migrate_Log("Loaded %d jumps (%d total).", rows, g_Jumps.Length);
+	Migrate_Detail("Loaded %d times (%d total).", rows, g_Times.Length);
 	return rows < MIGRATE_PAGE_SIZE;
 }
 
@@ -198,6 +167,11 @@ void RegisterCourseIndex(int mapID, int course, int index)
 void CourseKey(int mapID, int course, char[] buffer, int maxlength)
 {
 	FormatEx(buffer, maxlength, "%d_%d", mapID, course);
+}
+
+void TimeKey(int steamID, int mapCourseID, int mode, int style, int runTime, char[] buffer, int maxlength)
+{
+	FormatEx(buffer, maxlength, "%d_%d_%d_%d_%d", steamID, mapCourseID, mode, style, runTime);
 }
 
 int FindMapIndexByID(int mapID)

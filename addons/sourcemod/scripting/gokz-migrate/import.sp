@@ -30,7 +30,7 @@ bool Step_ImportReplays()
 	bool finished = g_Cursor >= g_Replays.Length;
 	if (finished || g_Cursor % 100 == 0)
 	{
-		Migrate_Log("Import progress: %d of %d replays handled, %d imported, %d failed, %d skipped, %d uploads pending in gokz-replays.", g_Cursor, g_Replays.Length, g_ImportedCount, g_ImportFailedCount, g_ImportSkippedCount, GOKZ_RP_GetPendingUploadCount());
+		Migrate_Detail("Import progress: %d of %d replays handled, %d imported, %d failed, %d skipped, %d uploads pending in gokz-replays.", g_Cursor, g_Replays.Length, g_ImportedCount, g_ImportFailedCount, g_ImportSkippedCount, GOKZ_RP_GetPendingUploadCount());
 	}
 	return finished;
 }
@@ -41,13 +41,7 @@ bool Step_ImportReplays()
 
 static void ImportReplay(MigrateReplay replay)
 {
-	bool cheater = replay.status == MatchStatus_Cheater;
-	if (cheater && !gCV_gokz_migrate_replays_include_cheaters.BoolValue)
-	{
-		g_ImportSkippedCount++;
-		return;
-	}
-	if (!cheater && replay.status != MatchStatus_Matched)
+	if (replay.status != MatchStatus_Matched)
 	{
 		g_ImportSkippedCount++;
 		return;
@@ -62,5 +56,5 @@ static void ImportReplay(MigrateReplay replay)
 		return;
 	}
 	g_ImportedCount++;
-	Migrate_Log("Queued %s as %s (record %d, %d bytes).", replay.path, replay.key, replay.recordID, replay.fileSize);
+	Migrate_Detail("Queued %s as %s (record %d, %d bytes).", replay.path, replay.key, replay.recordID, replay.fileSize);
 }

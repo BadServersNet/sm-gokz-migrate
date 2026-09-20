@@ -49,7 +49,7 @@ bool Step_AnalyzeCourses()
 		{
 			course.keep = false;
 			orphaned++;
-			Migrate_Log("Hanging MapCourse %d references missing MapID %d.", course.mapCourseID, course.mapID);
+			Migrate_Detail("Hanging MapCourse %d references missing MapID %d.", course.mapCourseID, course.mapID);
 			g_Courses.SetArray(i, course);
 			continue;
 		}
@@ -73,7 +73,7 @@ bool Step_AnalyzeCourses()
 				course.targetMapCourseID = target.mapCourseID;
 				course.keep = false;
 				merged++;
-				Migrate_Log("MapCourse %d (%s course %d) merges into MapCourse %d of %s.", course.mapCourseID, map.name, course.course, target.mapCourseID, map.targetName);
+				Migrate_Detail("MapCourse %d (%s course %d) merges into MapCourse %d of %s.", course.mapCourseID, map.name, course.course, target.mapCourseID, map.targetName);
 			}
 			else
 			{
@@ -97,23 +97,8 @@ bool Step_AnalyzeTimes()
 		g_Times.SetArray(i, time);
 	}
 	g_Cursor = end;
-	Migrate_Log("Analyzed %d of %d times.", g_Cursor, g_Times.Length);
+	Migrate_Detail("Analyzed %d of %d times.", g_Cursor, g_Times.Length);
 	return g_Cursor >= g_Times.Length;
-}
-
-bool Step_AnalyzeJumps()
-{
-	int end = IntMin(g_Cursor + MIGRATE_ANALYZE_BATCH, g_Jumps.Length);
-	for (int i = g_Cursor; i < end; i++)
-	{
-		MigrateJump jump;
-		g_Jumps.GetArray(i, jump);
-		AnalyzeJump(jump);
-		g_Jumps.SetArray(i, jump);
-	}
-	g_Cursor = end;
-	Migrate_Log("Analyzed %d of %d jumps.", g_Cursor, g_Jumps.Length);
-	return g_Cursor >= g_Jumps.Length;
 }
 
 bool Step_AnalyzePlayers()
@@ -126,7 +111,7 @@ bool Step_AnalyzePlayers()
 	{
 		MigratePlayer player;
 		g_Players.GetArray(i, player);
-		bool hasData = player.timeCount > 0 || player.jumpCount > 0;
+		bool hasData = player.timeCount > 0;
 		bool cheaterOnly = !hasData && player.cheater != 0;
 		if (cheaterOnly)
 		{
@@ -141,7 +126,7 @@ bool Step_AnalyzePlayers()
 		}
 		purged++;
 	}
-	Migrate_Log("Players: %d total, %d kept, %d purged for having no times or jumps, %d flagged cheaters without data (%s).", g_Players.Length, kept, purged, cheatersWithoutData, keepCheaters ? "kept" : "purged");
+	Migrate_Log("Players: %d total, %d kept, %d purged for having no times, %d flagged cheaters without data (%s).", g_Players.Length, kept, purged, cheatersWithoutData, keepCheaters ? "kept" : "purged");
 	return true;
 }
 
@@ -159,7 +144,7 @@ bool Step_AnalyzeHanging()
 		course.keep = false;
 		g_Courses.SetArray(i, course);
 		hangingCourses++;
-		Migrate_Log("Hanging MapCourse %d (MapID %d course %d) has no times and will not be migrated.", course.mapCourseID, course.mapID, course.course);
+		Migrate_Detail("Hanging MapCourse %d (MapID %d course %d) has no times and will not be migrated.", course.mapCourseID, course.mapID, course.course);
 	}
 
 	int hangingMaps = 0;
@@ -175,7 +160,7 @@ bool Step_AnalyzeHanging()
 		map.status = MapStatus_Hanging;
 		g_Maps.SetArray(i, map);
 		hangingMaps++;
-		Migrate_Log("Hanging map %s (MapID %d) has no times and will not be migrated.", map.name, map.mapID);
+		Migrate_Detail("Hanging map %s (MapID %d) has no times and will not be migrated.", map.name, map.mapID);
 	}
 
 	delete g_PositionKeys;
@@ -227,10 +212,10 @@ static void ClassifyMap(int index, MigrateMap map)
 	FindRenameCandidates(lower, map.note, sizeof(MigrateMap::note));
 	if (map.note[0] == '\0')
 	{
-		Migrate_Log("Map %s (MapID %d) is not on the global map list and has no similar global map.", map.name, map.mapID);
+		Migrate_Detail("Map %s (MapID %d) is not on the global map list and has no similar global map.", map.name, map.mapID);
 		return;
 	}
-	Migrate_Log("Map %s (MapID %d) is not on the global map list; possible renames: %s. Add it to the rename file to migrate it instead of deleting it.", map.name, map.mapID, map.note);
+	Migrate_Detail("Map %s (MapID %d) is not on the global map list; possible renames: %s. Add it to the rename file to migrate it instead of deleting it.", map.name, map.mapID, map.note);
 }
 
 static void ClassifyRenamedMap(int index, MigrateMap map, const char[] newName)
@@ -275,7 +260,7 @@ static void AnalyzeTime(MigrateTime time)
 	int courseIndex = FindCourseIndexByID(time.mapCourseID);
 	if (courseIndex == -1)
 	{
-		Migrate_Log("Hanging TimeID %d references missing MapCourseID %d.", time.timeID, time.mapCourseID);
+		Migrate_Detail("Hanging TimeID %d references missing MapCourseID %d.", time.timeID, time.mapCourseID);
 		return;
 	}
 	MigrateCourse course;
@@ -295,7 +280,7 @@ static void AnalyzeTime(MigrateTime time)
 	int playerIndex = FindPlayerIndex(time.steamID);
 	if (playerIndex == -1)
 	{
-		Migrate_Log("Hanging TimeID %d references missing SteamID32 %d.", time.timeID, time.steamID);
+		Migrate_Detail("Hanging TimeID %d references missing SteamID32 %d.", time.timeID, time.steamID);
 		return;
 	}
 
@@ -304,22 +289,6 @@ static void AnalyzeTime(MigrateTime time)
 	CountTimeOnCourse(course.targetMapCourseID);
 	CountTimeOnMap(course.targetMapID);
 	CountTimeOnPlayer(playerIndex);
-}
-
-static void AnalyzeJump(MigrateJump jump)
-{
-	int playerIndex = FindPlayerIndex(jump.steamID);
-	if (playerIndex == -1)
-	{
-		jump.keep = false;
-		Migrate_Log("Hanging JumpID %d references missing SteamID32 %d.", jump.jumpID, jump.steamID);
-		return;
-	}
-	jump.keep = true;
-	MigratePlayer player;
-	g_Players.GetArray(playerIndex, player);
-	player.jumpCount++;
-	g_Players.SetArray(playerIndex, player);
 }
 
 static void CountTimeOnCourse(int mapCourseID)

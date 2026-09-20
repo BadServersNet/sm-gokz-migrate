@@ -195,7 +195,7 @@ static void RequestGlobalMapsPage()
 	g_GlobalState = GlobalRequest_InFlight;
 	g_GlobalRequestTime = GetTime();
 	Migrate_Log("Requesting global maps from offset %d.", g_GlobalOffset);
-	bool sent = GlobalAPI_GetMaps(GetGlobalMapsCallback, g_GlobalOffset, DEFAULT_STRING, DEFAULT_INT, DEFAULT_INT, DEFAULT_BOOL, DEFAULT_INT, DEFAULT_STRING, DEFAULT_STRING, g_GlobalOffset, MIGRATE_GLOBAL_PAGE_SIZE);
+	bool sent = GlobalAPI_GetMaps(GetGlobalMapsCallback, g_GlobalOffset, DEFAULT_STRING, DEFAULT_INT, DEFAULT_INT, true, DEFAULT_INT, DEFAULT_STRING, DEFAULT_STRING, g_GlobalOffset, MIGRATE_GLOBAL_PAGE_SIZE);
 	if (!sent)
 	{
 		Migrate_Log("GlobalAPI_GetMaps refused to send the request.");
