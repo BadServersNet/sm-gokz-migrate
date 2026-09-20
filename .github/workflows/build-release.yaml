@@ -1,0 +1,83 @@
+name: Build and release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  SOURCE_DIR: addons/sourcemod/scripting
+  PLUGINS: gokz-migrate
+  ARCHIVE_NAME: gokz-migrate
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up SourcePawn
+        uses: rumblefrog/setup-sp@v1.3.1
+        with:
+          version: "1.12.x"
+
+      - name: Verify tag version
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          for plugin in ${PLUGINS}; do
+            plugin_version="$(sed -n 's/^#define PLUGIN_VERSION "\([^"]*\)".*/\1/p' "${SOURCE_DIR}/${plugin}.sp")"
+            test "v${plugin_version}" = "${GITHUB_REF_NAME}"
+          done
+
+      - name: Compile plugins
+        shell: bash
+        run: |
+          mkdir -p build/addons/sourcemod/plugins
+          for plugin in ${PLUGINS}; do
+            spcomp -O2 -i"${SOURCE_DIR}/include" "${SOURCE_DIR}/${plugin}.sp" -o "build/addons/sourcemod/plugins/${plugin}.smx"
+          done
+
+      - name: Package source
+        shell: bash
+        run: |
+          mkdir -p build/addons/sourcemod/scripting/include
+          cp README.md build/
+          for plugin in ${PLUGINS}; do
+            cp "${SOURCE_DIR}/${plugin}.sp" build/addons/sourcemod/scripting/
+            cp -R "${SOURCE_DIR}/${plugin}" build/addons/sourcemod/scripting/
+          done
+          cp -R "${SOURCE_DIR}/include/." build/addons/sourcemod/scripting/include/
+          cp -R cfg build/
+
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARCHIVE_NAME }}-${{ github.sha }}
+          path: build
+
+      - name: Create release archives
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          mkdir -p releases
+          tar -C build -czf "releases/${ARCHIVE_NAME}-${GITHUB_REF_NAME}.tar.gz" .
+          cd build
+          zip -r "../releases/${ARCHIVE_NAME}-${GITHUB_REF_NAME}.zip" .
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: releases/*
